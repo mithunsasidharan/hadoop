@@ -22,6 +22,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.Reader;
+import java.security.Security;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -85,6 +86,7 @@ import org.apache.hadoop.yarn.sls.conf.SLSConfiguration;
 import org.apache.hadoop.yarn.sls.nodemanager.NMSimulator;
 import org.apache.hadoop.yarn.sls.resourcemanager.MockAMLauncher;
 import org.apache.hadoop.yarn.sls.scheduler.SLSCapacityScheduler;
+import org.apache.hadoop.yarn.sls.scheduler.SchedulerMetrics;
 import org.apache.hadoop.yarn.sls.scheduler.TaskRunner;
 import org.apache.hadoop.yarn.sls.scheduler.SLSFairScheduler;
 import org.apache.hadoop.yarn.sls.scheduler.ContainerSimulator;
@@ -95,7 +97,6 @@ import org.apache.hadoop.yarn.sls.utils.SLSUtils;
 import org.apache.hadoop.yarn.util.UTCClock;
 import org.apache.hadoop.yarn.util.resource.ResourceUtils;
 import org.apache.hadoop.yarn.util.resource.Resources;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -148,6 +149,10 @@ public class SLSRunner extends Configured implements Tool {
   public enum TraceType {
     SLS, RUMEN, SYNTH
   }
+
+  public static final String NETWORK_CACHE_TTL = "networkaddress.cache.ttl";
+  public static final String NETWORK_NEGATIVE_CACHE_TTL =
+      "networkaddress.cache.negative.ttl";
 
   private TraceType inputType;
   private SynthTraceJobProducer stjp;
@@ -240,6 +245,9 @@ public class SLSRunner extends Configured implements Tool {
 
   public void start() throws IOException, ClassNotFoundException, YarnException,
       InterruptedException {
+
+    enableDNSCaching(getConf());
+
     // start resource manager
     startRM();
     // start node managers
@@ -257,6 +265,23 @@ public class SLSRunner extends Configured implements Tool {
     waitForNodesRunning();
     // starting the runner once everything is ready to go,
     runner.start();
+  }
+
+  /**
+   * Enables DNS Caching based on config. If DNS caching is enabled, then set
+   * the DNS cache to infinite time. Since in SLS random nodes are added, DNS
+   * resolution can take significant time which can cause erroneous results.
+   * For more details, check <a href=
+   * "https://docs.oracle.com/javase/8/docs/technotes/guides/net/properties.html">
+   * Java Networking Properties</a>
+   * @param conf Configuration object.
+   */
+  static void enableDNSCaching(Configuration conf) {
+    if (conf.getBoolean(SLSConfiguration.DNS_CACHING_ENABLED,
+        SLSConfiguration.DNS_CACHING_ENABLED_DEFAULT)) {
+      Security.setProperty(NETWORK_CACHE_TTL, "-1");
+      Security.setProperty(NETWORK_NEGATIVE_CACHE_TTL, "-1");
+    }
   }
 
   private void startRM() throws ClassNotFoundException, YarnException {
@@ -345,7 +370,7 @@ public class SLSRunner extends Configured implements Tool {
 
     // create NM simulators
     Random random = new Random();
-    Set<String> rackSet = new ConcurrentHashSet<>();
+    Set<String> rackSet = ConcurrentHashMap.newKeySet();
     int threadPoolSize = Math.max(poolSize,
         SLSConfiguration.RUNNER_POOL_SIZE_DEFAULT);
     ExecutorService executorService = Executors.
@@ -557,10 +582,23 @@ public class SLSRunner extends Configured implements Tool {
         executionType = ExecutionType.valueOf(
             jsonTask.get(SLSConfiguration.TASK_EXECUTION_TYPE).toString());
       }
+      long allocationId = -1;
+      if (jsonTask.containsKey(SLSConfiguration.TASK_ALLOCATION_ID)) {
+        allocationId = Long.parseLong(
+            jsonTask.get(SLSConfiguration.TASK_ALLOCATION_ID).toString());
+      }
+
+      long requestDelay = 0;
+      if (jsonTask.containsKey(SLSConfiguration.TASK_REQUEST_DELAY)) {
+        requestDelay = Long.parseLong(
+            jsonTask.get(SLSConfiguration.TASK_REQUEST_DELAY).toString());
+      }
+      requestDelay = Math.max(requestDelay, 0);
+
       for (int i = 0; i < count; i++) {
         containers.add(
             new ContainerSimulator(res, duration, hostname, priority, type,
-                executionType));
+                executionType, allocationId, requestDelay));
       }
     }
 
@@ -779,7 +817,10 @@ public class SLSRunner extends Configured implements Tool {
     }
 
     queueAppNumMap.put(queueName, appNum);
-    wrapper.getSchedulerMetrics().trackQueue(queueName);
+    SchedulerMetrics metrics = wrapper.getSchedulerMetrics();
+    if (metrics != null) {
+      metrics.trackQueue(queueName);
+    }
   }
 
   private void runNewAM(String jobType, String user,

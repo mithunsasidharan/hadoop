@@ -33,9 +33,9 @@
 
   function load_overview() {
     var BEANS = [
-      {"name": "federation",  "url": "/jmx?qry=Hadoop:service=Router,name=FederationState"},
-      {"name": "router",  "url": "/jmx?qry=Hadoop:service=Router,name=Router"},
-      {"name": "mem",         "url": "/jmx?qry=java.lang:type=Memory"}
+      {"name": "federation",  "url": "jmx?qry=Hadoop:service=Router,name=FederationState"},
+      {"name": "router",  "url": "jmx?qry=Hadoop:service=Router,name=Router"},
+      {"name": "mem",         "url": "jmx?qry=java.lang:type=Memory"}
     ];
 
     var HELPERS = {
@@ -147,7 +147,7 @@
     }
 
     $.get(
-      '/jmx?qry=Hadoop:service=Router,name=FederationState',
+      'jmx?qry=Hadoop:service=Router,name=FederationState',
       guard_with_startup_progress(function (resp) {
         var data = workaround(resp.beans[0]);
         var base = dust.makeBase(HELPERS);
@@ -211,7 +211,7 @@
     }
 
     $.get(
-      '/jmx?qry=Hadoop:service=Router,name=FederationState',
+      'jmx?qry=Hadoop:service=Router,name=FederationState',
       guard_with_startup_progress(function (resp) {
         var data = workaround(resp.beans[0]);
         var base = dust.makeBase(HELPERS);
@@ -289,7 +289,7 @@
     }
 
     $.get(
-      '/jmx?qry=Hadoop:service=NameNode,name=NameNodeInfo',
+      'jmx?qry=Hadoop:service=NameNode,name=NameNodeInfo',
       guard_with_startup_progress(function (resp) {
         var data = workaround(resp.beans[0]);
         var base = dust.makeBase(HELPERS);
@@ -315,10 +315,11 @@
       function augment_read_only(mountTable) {
         for (var i = 0, e = mountTable.length; i < e; ++i) {
           if (mountTable[i].readonly == true) {
-            mountTable[i].readonly = "true"
-            mountTable[i].status = "Read only"
+            mountTable[i].readonly = "readonly"
+            mountTable[i].status = "Read Only"
           } else {
-            mountTable[i].readonly = "false"
+            mountTable[i].readonly = "readwrite"
+            mountTable[i].status = "Read Write"
           }
         }
       }
@@ -341,7 +342,7 @@
     }
 
     $.get(
-      '/jmx?qry=Hadoop:service=Router,name=FederationState',
+      'jmx?qry=Hadoop:service=Router,name=FederationState',
       guard_with_startup_progress(function (resp) {
         var data = workaround(resp.beans[0]);
         var base = dust.makeBase(HELPERS);

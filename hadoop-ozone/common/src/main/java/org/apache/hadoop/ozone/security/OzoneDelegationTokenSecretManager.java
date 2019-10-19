@@ -84,13 +84,16 @@ public class OzoneDelegationTokenSecretManager
    * milliseconds
    * @param dtRemoverScanInterval how often the tokens are scanned for expired
    * tokens in milliseconds
+   * @param certClient certificate client to SCM CA
    */
   public OzoneDelegationTokenSecretManager(OzoneConfiguration conf,
       long tokenMaxLifetime, long tokenRenewInterval,
       long dtRemoverScanInterval, Text service,
-      S3SecretManager s3SecretManager) throws IOException {
+      S3SecretManager s3SecretManager, CertificateClient certClient)
+      throws IOException {
     super(new SecurityConfig(conf), tokenMaxLifetime, tokenRenewInterval,
         service, LOG);
+    setCertClient(certClient);
     currentTokens = new ConcurrentHashMap();
     this.tokenRemoverScanInterval = dtRemoverScanInterval;
     this.s3SecretManager = (S3SecretManagerImpl) s3SecretManager;
@@ -251,12 +254,28 @@ public class OzoneDelegationTokenSecretManager
     }
 
     long renewTime = Math.min(id.getMaxDate(), now + getTokenRenewInterval());
-    try {
-      addToTokenStore(id, token.getPassword(),  renewTime);
-    } catch (IOException e) {
-      LOG.error("Unable to update token " + id.getSequenceNumber(), e);
+
+    // For HA ratis will take care of updating.
+    // This will be removed, when HA/Non-HA code is merged.
+    if (!isRatisEnabled) {
+      try {
+        addToTokenStore(id, token.getPassword(), renewTime);
+      } catch (IOException e) {
+        LOG.error("Unable to update token " + id.getSequenceNumber(), e);
+      }
     }
     return renewTime;
+  }
+
+  public void updateRenewToken(Token<OzoneTokenIdentifier> token,
+      OzoneTokenIdentifier ozoneTokenIdentifier, long expiryTime) {
+    //TODO: Instead of having in-memory map inside this class, we can use
+    // cache from table and make this table cache clean up policy NEVER. In
+    // this way, we don't need to maintain seperate in-memory map. To do this
+    // work we need to merge HA/Non-HA code.
+    TokenInfo tokenInfo = new TokenInfo(expiryTime, token.getPassword(),
+        ozoneTokenIdentifier.getTrackingId());
+    currentTokens.put(ozoneTokenIdentifier, tokenInfo);
   }
 
   /**
@@ -270,8 +289,10 @@ public class OzoneDelegationTokenSecretManager
       String canceller) throws IOException {
     OzoneTokenIdentifier id = OzoneTokenIdentifier.readProtoBuf(
         token.getIdentifier());
-    LOG.debug("Token cancellation requested for identifier: {}",
-        formatTokenId(id));
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Token cancellation requested for identifier: {}",
+          formatTokenId(id));
+    }
 
     if (id.getUser() == null) {
       throw new InvalidToken("Token with no owner " + formatTokenId(id));

@@ -38,9 +38,10 @@ import org.apache.hadoop.ozone.om.helpers.OmBucketInfo;
 import org.apache.hadoop.ozone.om.helpers.OmKeyArgs;
 import org.apache.hadoop.ozone.om.helpers.OmVolumeArgs;
 import org.apache.hadoop.ozone.om.helpers.OpenKeySession;
+import org.apache.hadoop.ozone.om.helpers.OzoneAclUtil;
+import org.apache.hadoop.ozone.om.request.TestOMRequestUtils;
 import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer.ACLIdentityType;
 import org.apache.hadoop.ozone.security.acl.IAccessAuthorizer.ACLType;
-import org.apache.hadoop.ozone.web.utils.OzoneUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.BeforeClass;
@@ -178,7 +179,7 @@ public class TestOzoneNativeAuthorizer {
         .setFactor(HddsProtos.ReplicationFactor.ONE)
         .setDataSize(0)
         .setType(HddsProtos.ReplicationType.STAND_ALONE)
-        .setAcls(OzoneUtils.getAclList(ugi.getUserName(), ugi.getGroups(),
+        .setAcls(OzoneAclUtil.getAclList(ugi.getUserName(), ugi.getGroups(),
             ALL, ALL))
         .build();
 
@@ -208,7 +209,7 @@ public class TestOzoneNativeAuthorizer {
         .setVolumeName(volumeName)
         .setBucketName(bucketName)
         .build();
-    bucketManager.createBucket(bucketInfo);
+    TestOMRequestUtils.addBucketToOM(metadataManager, bucketInfo);
     buckObj = new OzoneObjInfo.Builder()
         .setVolumeName(vol)
         .setBucketName(buck)
@@ -223,7 +224,7 @@ public class TestOzoneNativeAuthorizer {
         .setAdminName("bilbo")
         .setOwnerName("bilbo")
         .build();
-    volumeManager.createVolume(volumeArgs);
+    TestOMRequestUtils.addVolumeToOM(metadataManager, volumeArgs);
     volObj = new OzoneObjInfo.Builder()
         .setVolumeName(vol)
         .setResType(VOLUME)

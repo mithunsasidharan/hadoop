@@ -48,7 +48,9 @@ public class OzoneManagerHARequestHandlerImpl
   @Override
   public OMResponse handleApplyTransaction(OMRequest omRequest,
       long transactionLogIndex) {
-    LOG.debug("Received OMRequest: {}, ", omRequest);
+    if (LOG.isDebugEnabled()) {
+      LOG.debug("Received OMRequest: {}, ", omRequest);
+    }
     Type cmdType = omRequest.getCmdType();
     switch (cmdType) {
     case CreateVolume:
@@ -75,6 +77,8 @@ public class OzoneManagerHARequestHandlerImpl
     case RemoveAcl:
     case SetAcl:
     case GetDelegationToken:
+    case CancelDelegationToken:
+    case RenewDelegationToken:
       //TODO: We don't need to pass transactionID, this will be removed when
       // complete write requests is changed to new model. And also we can
       // return OMClientResponse, then adding to doubleBuffer can be taken
